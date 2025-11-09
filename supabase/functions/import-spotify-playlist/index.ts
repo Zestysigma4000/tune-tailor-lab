@@ -238,7 +238,7 @@ serve(async (req) => {
 
     const { error: insertError } = await supabaseClient
       .from('playlist_tracks')
-      .insert(playlistTracks, { onConflict: 'playlist_id,track_id', ignoreDuplicates: true });
+      .upsert(playlistTracks, { onConflict: 'playlist_id,track_id' });
 
     if (insertError) {
       throw insertError;

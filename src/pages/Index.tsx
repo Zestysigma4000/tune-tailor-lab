@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Auth } from "@/components/Auth";
 import { ImportDialog } from "@/components/ImportDialog";
 import { PlayerBar } from "@/components/PlayerBar";
+import { Library } from "@/pages/Library";
 import { Button } from "@/components/ui/button";
-import { Music, LogOut } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Music, LogOut, Library as LibraryIcon, ListMusic } from "lucide-react";
 
 interface Playlist {
   id: string;
@@ -138,58 +140,80 @@ const Index = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid md:grid-cols-[300px,1fr] gap-6">
-          <aside className="space-y-4">
-            <h2 className="text-lg font-semibold">Your Playlists</h2>
-            <div className="space-y-2">
-              {playlists.map((playlist) => (
-                <button
-                  key={playlist.id}
-                  onClick={() => setSelectedPlaylist(playlist.id)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    selectedPlaylist === playlist.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card hover:bg-accent'
-                  }`}
-                >
-                  <p className="font-medium">{playlist.name}</p>
-                  <p className="text-sm opacity-75">{playlist.description}</p>
-                </button>
-              ))}
-              {playlists.length === 0 && (
-                <p className="text-muted-foreground text-sm">
-                  No playlists yet. Import one from Spotify!
-                </p>
-              )}
-            </div>
-          </aside>
+        <Tabs defaultValue="library" className="space-y-6">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+            <TabsTrigger value="library">
+              <LibraryIcon className="h-4 w-4 mr-2" />
+              Library
+            </TabsTrigger>
+            <TabsTrigger value="playlists">
+              <ListMusic className="h-4 w-4 mr-2" />
+              Your Playlists
+            </TabsTrigger>
+          </TabsList>
 
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">
-              {selectedPlaylist ? 'Tracks' : 'Select a playlist'}
-            </h2>
-            <div className="space-y-2">
-              {tracks.map((track, index) => (
-                <button
-                  key={track.id}
-                  onClick={() => playTrack(track, index)}
-                  className={`w-full text-left p-4 rounded-lg transition-colors ${
-                    currentTrack?.id === track.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card hover:bg-accent'
-                  }`}
-                >
-                  <p className="font-medium">{track.title}</p>
-                  <p className="text-sm opacity-75">{track.artist}</p>
-                  {track.album && <p className="text-xs opacity-60">{track.album}</p>}
-                </button>
-              ))}
-              {tracks.length === 0 && selectedPlaylist && (
-                <p className="text-muted-foreground text-sm">No tracks in this playlist</p>
-              )}
+          <TabsContent value="library">
+            <Library onPlayTrack={(track) => {
+              setCurrentTrack(track as any);
+              setCurrentTrackIndex(0);
+            }} />
+          </TabsContent>
+
+          <TabsContent value="playlists">
+            <div className="grid md:grid-cols-[300px,1fr] gap-6">
+              <aside className="space-y-4">
+                <h2 className="text-lg font-semibold">Your Playlists</h2>
+                <div className="space-y-2">
+                  {playlists.map((playlist) => (
+                    <button
+                      key={playlist.id}
+                      onClick={() => setSelectedPlaylist(playlist.id)}
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        selectedPlaylist === playlist.id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card hover:bg-accent'
+                      }`}
+                    >
+                      <p className="font-medium">{playlist.name}</p>
+                      <p className="text-sm opacity-75">{playlist.description}</p>
+                    </button>
+                  ))}
+                  {playlists.length === 0 && (
+                    <p className="text-muted-foreground text-sm">
+                      No playlists yet. Import one from Spotify!
+                    </p>
+                  )}
+                </div>
+              </aside>
+
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">
+                  {selectedPlaylist ? 'Tracks' : 'Select a playlist'}
+                </h2>
+                <div className="space-y-2">
+                  {tracks.map((track, index) => (
+                    <button
+                      key={track.id}
+                      onClick={() => playTrack(track, index)}
+                      className={`w-full text-left p-4 rounded-lg transition-colors ${
+                        currentTrack?.id === track.id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card hover:bg-accent'
+                      }`}
+                    >
+                      <p className="font-medium">{track.title}</p>
+                      <p className="text-sm opacity-75">{track.artist}</p>
+                      {track.album && <p className="text-xs opacity-60">{track.album}</p>}
+                    </button>
+                  ))}
+                  {tracks.length === 0 && selectedPlaylist && (
+                    <p className="text-muted-foreground text-sm">No tracks in this playlist</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </main>
 
       <PlayerBar
