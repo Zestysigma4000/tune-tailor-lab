@@ -5,11 +5,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Play, Music2 } from "lucide-react";
 import { toast } from "sonner";
 
-interface ArchiveTrack {
-  identifier: string;
+interface YouTubeTrack {
+  videoId: string;
   title: string;
-  creator: string;
-  downloads?: number;
+  artist: string;
+  thumbnail?: string;
 }
 
 interface LibraryProps {
@@ -29,8 +29,8 @@ const GENRES = [
 
 export const Library = ({ onPlayTrack }: LibraryProps) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<ArchiveTrack[]>([]);
-  const [featuredTracks, setFeaturedTracks] = useState<ArchiveTrack[]>([]);
+  const [results, setResults] = useState<YouTubeTrack[]>([]);
+  const [featuredTracks, setFeaturedTracks] = useState<YouTubeTrack[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
@@ -39,13 +39,51 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     loadFeaturedTracks();
   }, []);
 
+  const parseYouTubeMusicResponse = (data: any): YouTubeTrack[] => {
+    const tracks: YouTubeTrack[] = [];
+    const contents = data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
+    
+    if (!contents) return tracks;
+
+    for (const section of contents) {
+      const musicShelf = section?.musicShelfRenderer;
+      if (!musicShelf?.contents) continue;
+
+      for (const item of musicShelf.contents) {
+        const renderer = item?.musicResponsiveListItemRenderer;
+        if (!renderer) continue;
+
+        const videoId = renderer?.playlistItemData?.videoId || 
+                       renderer?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+        
+        if (videoId) {
+          tracks.push({
+            videoId,
+            title: renderer?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || '',
+            artist: renderer?.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || '',
+            thumbnail: renderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url
+          });
+        }
+      }
+    }
+    return tracks;
+  };
+
   const loadFeaturedTracks = async () => {
     try {
       const response = await fetch(
-        `https://archive.org/advancedsearch.php?q=mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=20&output=json`
+        'https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20231122.01.00' } },
+            query: 'top hits 2024'
+          })
+        }
       );
       const data = await response.json();
-      setFeaturedTracks(data.response.docs || []);
+      setFeaturedTracks(parseYouTubeMusicResponse(data).slice(0, 20));
     } catch (error) {
       console.error('Failed to load featured tracks:', error);
     }
@@ -61,15 +99,23 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     setSearching(true);
     setSelectedGenre(null);
     try {
-      const encodedQuery = encodeURIComponent(searchTerm);
       const response = await fetch(
-        `https://archive.org/advancedsearch.php?q=${encodedQuery}%20AND%20mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=30&output=json`
+        'https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20231122.01.00' } },
+            query: searchTerm
+          })
+        }
       );
       
       const data = await response.json();
-      setResults(data.response.docs || []);
+      const tracks = parseYouTubeMusicResponse(data);
+      setResults(tracks);
       
-      if (data.response.docs.length === 0) {
+      if (tracks.length === 0) {
         toast.info("No results found");
       }
     } catch (error) {
@@ -86,37 +132,14 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     handleSearch(genre.query);
   };
 
-  const playTrack = async (track: ArchiveTrack) => {
-    try {
-      // Fetch metadata to get audio file
-      const metadataResponse = await fetch(
-        `https://archive.org/metadata/${track.identifier}`
-      );
-      const metadata = await metadataResponse.json();
-      
-      // Find first MP3 or audio file
-      const audioFile = metadata.files?.find((f: any) => 
-        f.format === 'VBR MP3' || f.format === 'MP3' || f.format === 'Ogg Vorbis'
-      );
-      
-      if (audioFile) {
-        const streamUrl = `https://archive.org/download/${track.identifier}/${encodeURIComponent(audioFile.name)}`;
-        
-        onPlayTrack({
-          id: track.identifier,
-          title: track.title,
-          artist: track.creator || 'Unknown Artist',
-          stream_url: streamUrl,
-        });
-        
-        toast.success(`Playing: ${track.title}`);
-      } else {
-        toast.error("No audio file found for this track");
-      }
-    } catch (error) {
-      console.error('Play error:', error);
-      toast.error("Failed to play track");
-    }
+  const playTrack = (track: YouTubeTrack) => {
+    onPlayTrack({
+      id: track.videoId,
+      title: track.title,
+      artist: track.artist,
+      stream_url: `https://www.youtube.com/watch?v=${track.videoId}`,
+    });
+    toast.success(`Playing: ${track.title}`);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -125,27 +148,24 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     }
   };
 
-  const renderTracks = (tracks: ArchiveTrack[]) => (
+  const renderTracks = (tracks: YouTubeTrack[]) => (
     <div className="space-y-2">
       {tracks.map((track) => (
         <div
-          key={track.identifier}
+          key={track.videoId}
           className="p-4 rounded-lg bg-card hover:bg-accent transition-colors flex items-center justify-between group"
         >
           <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="w-12 h-12 bg-primary/10 rounded flex items-center justify-center flex-shrink-0">
-              <Music2 className="h-6 w-6 text-primary" />
-            </div>
+            {track.thumbnail ? (
+              <img src={track.thumbnail} alt={track.title} className="w-12 h-12 rounded object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-12 h-12 bg-primary/10 rounded flex items-center justify-center flex-shrink-0">
+                <Music2 className="h-6 w-6 text-primary" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{track.title}</p>
-              <p className="text-sm text-muted-foreground truncate">
-                {track.creator || 'Unknown Artist'}
-              </p>
-              {track.downloads && (
-                <p className="text-xs text-muted-foreground">
-                  {track.downloads.toLocaleString()} plays
-                </p>
-              )}
+              <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
             </div>
           </div>
           <Button

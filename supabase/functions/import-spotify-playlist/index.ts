@@ -7,6 +7,58 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const searchYouTubeMusic = async (title: string, artist: string) => {
+  try {
+    const query = `${title} ${artist}`;
+    const searchUrl = `https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30`;
+    
+    const response = await fetch(searchUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: {
+          client: { clientName: 'WEB_REMIX', clientVersion: '1.20231122.01.00' }
+        },
+        query
+      })
+    });
+
+    const data = await response.json();
+    const contents = data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
+    
+    if (!contents) return null;
+
+    for (const section of contents) {
+      const musicShelf = section?.musicShelfRenderer;
+      if (!musicShelf?.contents) continue;
+
+      for (const item of musicShelf.contents) {
+        const renderer = item?.musicResponsiveListItemRenderer;
+        if (!renderer) continue;
+
+        const videoId = renderer?.playlistItemData?.videoId || 
+                       renderer?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+        
+        if (videoId) {
+          const titleText = renderer?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || title;
+          const artistText = renderer?.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || artist;
+          
+          return {
+            videoId,
+            title: titleText,
+            artist: artistText,
+            thumbnail: renderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url
+          };
+        }
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error searching YouTube Music:', error);
+    return null;
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -97,9 +149,8 @@ serve(async (req) => {
       tracks = playlistData.tracks.items
         .filter((item: any) => item?.track)
         .map((item: any) => ({
-          title: item.track.name,
-          artist: item.track.artists?.[0]?.name || 'Unknown Artist',
-          album: item.track.album?.name,
+          name: item.track.name,
+          artists: item.track.artists,
         }));
     } else if (trackMatch) {
       // Fetch single track from Spotify
@@ -124,113 +175,59 @@ serve(async (req) => {
       }
 
       tracks = [{
-        title: trackData.name,
-        artist: trackData.artists?.[0]?.name || 'Unknown Artist',
-        album: trackData.album?.name,
+        name: trackData.name,
+        artists: trackData.artists,
       }];
     }
 
     console.log(`Found ${tracks.length} tracks from Spotify`);
 
-    // Search Internet Archive for each track and create database records
+    // Search YouTube Music for each track
     const foundTracks = [];
     
     for (const track of tracks) {
-      try {
-        console.log(`Searching for: ${track.artist} - ${track.title}`);
-        
-        // Search Internet Archive with better matching
-        const artistQuery = encodeURIComponent(track.artist);
-        const titleQuery = encodeURIComponent(track.title);
-        const archiveResponse = await fetch(
-          `https://archive.org/advancedsearch.php?q=creator:${artistQuery}%20AND%20title:${titleQuery}%20AND%20mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=5&output=json`
-        );
-        
-        const archiveData = await archiveResponse.json();
-        console.log(`Search results for "${track.artist} - ${track.title}":`, archiveData.response.docs.length);
-        
-        if (archiveData.response.docs.length > 0) {
-          // Find best match by checking title similarity
-          let bestMatch = archiveData.response.docs[0];
-          const searchTitle = track.title.toLowerCase();
-          const searchArtist = track.artist.toLowerCase();
-          
-          for (const doc of archiveData.response.docs) {
-            const docTitle = (doc.title || '').toLowerCase();
-            const docCreator = (doc.creator || '').toLowerCase();
-            
-            if (docTitle.includes(searchTitle) && docCreator.includes(searchArtist)) {
-              bestMatch = doc;
-              break;
-            }
+      const title = track.name;
+      const artist = track.artists[0]?.name || 'Unknown Artist';
+      
+      console.log(`Searching for: ${title} by ${artist}`);
+      const ytTrack = await searchYouTubeMusic(title, artist);
+      
+      if (ytTrack) {
+        const { data: existingTrack } = await supabaseClient
+          .from('tracks')
+          .select('id')
+          .eq('source_id', ytTrack.videoId)
+          .single();
+
+        let trackId;
+        if (existingTrack) {
+          trackId = existingTrack.id;
+        } else {
+          const { data: newTrack, error: trackError } = await supabaseClient
+            .from('tracks')
+            .insert({
+              title: ytTrack.title,
+              artist: ytTrack.artist,
+              stream_url: `https://www.youtube.com/watch?v=${ytTrack.videoId}`,
+              source_id: ytTrack.videoId,
+              source: 'youtube',
+              cover_image: ytTrack.thumbnail
+            })
+            .select()
+            .single();
+
+          if (trackError) {
+            console.error('Error inserting track:', trackError);
+            continue;
           }
-          
-          const doc = bestMatch;
-          console.log(`Best match: ${doc.title} by ${doc.creator}`);
-          
-          // Get metadata for the item to find audio file
-          const metadataResponse = await fetch(
-            `https://archive.org/metadata/${doc.identifier}`
-          );
-          const metadata = await metadataResponse.json();
-          
-          // Find first MP3 or other audio file
-          const audioFile = metadata.files?.find((f: any) => 
-            f.format === 'VBR MP3' || f.format === 'MP3' || f.format === 'Ogg Vorbis'
-          );
-          
-          if (audioFile) {
-            const streamUrl = `https://archive.org/download/${doc.identifier}/${encodeURIComponent(audioFile.name)}`;
-            
-            // Insert or get existing track
-            const { data: existingTrack } = await supabaseClient
-              .from('tracks')
-              .select('id')
-              .eq('source_id', doc.identifier)
-              .single();
-            
-            let trackId;
-            
-            if (existingTrack) {
-              trackId = existingTrack.id;
-            } else {
-              const { data: newTrack, error: trackError } = await supabaseClient
-                .from('tracks')
-                .insert({
-                  title: track.title,
-                  artist: track.artist,
-                  album: track.album,
-                  stream_url: streamUrl,
-                  source: 'archive.org',
-                  source_id: doc.identifier,
-                })
-                .select()
-                .single();
-              
-              if (trackError) {
-                console.error('Error inserting track:', trackError);
-                continue;
-              }
-              
-              trackId = newTrack.id;
-            }
-            
-            foundTracks.push({ trackId, title: track.title, artist: track.artist });
-          }
+          trackId = newTrack.id;
         }
-      } catch (error) {
-        console.error(`Error processing track ${track.title}:`, error);
+        
+        foundTracks.push(trackId);
       }
     }
 
-    console.log(`Found ${foundTracks.length} tracks on Internet Archive`);
-
-    // Dedupe tracks by trackId
-    const uniqueMap = new Map<string, { trackId: string; title: string; artist: string }>();
-    for (const t of foundTracks) {
-      if (!uniqueMap.has(t.trackId)) uniqueMap.set(t.trackId, t);
-    }
-    const uniqueFoundTracks = Array.from(uniqueMap.values());
+    console.log(`Found ${foundTracks.length} tracks on YouTube Music`);
 
     // Create playlist
     const { data: playlist, error: playlistError } = await supabaseClient
@@ -238,7 +235,7 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         name: playlistName || 'Imported from Spotify',
-        description: `Imported ${uniqueFoundTracks.length} tracks`,
+        description: `Imported ${foundTracks.length} tracks`,
       })
       .select()
       .single();
@@ -248,9 +245,9 @@ serve(async (req) => {
     }
 
     // Add tracks to playlist
-    const playlistTracks = uniqueFoundTracks.map((track, index) => ({
+    const playlistTracks = foundTracks.map((trackId, index) => ({
       playlist_id: playlist.id,
-      track_id: track.trackId,
+      track_id: trackId,
       position: index,
     }));
 
@@ -266,7 +263,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         playlist,
-        tracksFound: uniqueFoundTracks.length,
+        tracksFound: foundTracks.length,
         tracksTotal: tracks.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
