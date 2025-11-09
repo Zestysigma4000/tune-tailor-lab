@@ -207,13 +207,20 @@ serve(async (req) => {
 
     console.log(`Found ${foundTracks.length} tracks on Internet Archive`);
 
+    // Dedupe tracks by trackId
+    const uniqueMap = new Map<string, { trackId: string; title: string; artist: string }>();
+    for (const t of foundTracks) {
+      if (!uniqueMap.has(t.trackId)) uniqueMap.set(t.trackId, t);
+    }
+    const uniqueFoundTracks = Array.from(uniqueMap.values());
+
     // Create playlist
     const { data: playlist, error: playlistError } = await supabaseClient
       .from('playlists')
       .insert({
         user_id: user.id,
         name: playlistName || 'Imported from Spotify',
-        description: `Imported ${foundTracks.length} tracks`,
+        description: `Imported ${uniqueFoundTracks.length} tracks`,
       })
       .select()
       .single();
@@ -223,7 +230,7 @@ serve(async (req) => {
     }
 
     // Add tracks to playlist
-    const playlistTracks = foundTracks.map((track, index) => ({
+    const playlistTracks = uniqueFoundTracks.map((track, index) => ({
       playlist_id: playlist.id,
       track_id: track.trackId,
       position: index,
@@ -231,7 +238,7 @@ serve(async (req) => {
 
     const { error: insertError } = await supabaseClient
       .from('playlist_tracks')
-      .insert(playlistTracks);
+      .insert(playlistTracks, { onConflict: 'playlist_id,track_id', ignoreDuplicates: true });
 
     if (insertError) {
       throw insertError;
@@ -241,7 +248,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         playlist,
-        tracksFound: foundTracks.length,
+        tracksFound: uniqueFoundTracks.length,
         tracksTotal: tracks.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -249,7 +256,13 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in import-spotify-playlist:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    let errorMessage = 'Unknown error occurred';
+    if (error && typeof error === 'object') {
+      const e = error as any;
+      errorMessage = e.message || e.error || e.hint || e.details || JSON.stringify(e);
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

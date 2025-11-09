@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,9 +51,9 @@ export const ImportDialog = ({ onImportComplete }: { onImportComplete: () => voi
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Import from Spotify</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-2">
+          <DialogDescription>
             Paste a Spotify playlist or track share link to import songs from Internet Archive's free music library.
-          </p>
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
