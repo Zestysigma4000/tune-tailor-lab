@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Play } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, Play, Music2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface ArchiveTrack {
@@ -15,22 +16,54 @@ interface LibraryProps {
   onPlayTrack: (track: { id: string; title: string; artist: string; stream_url: string }) => void;
 }
 
+const GENRES = [
+  { name: "Rock", query: "rock music" },
+  { name: "Jazz", query: "jazz music" },
+  { name: "Classical", query: "classical music" },
+  { name: "Blues", query: "blues music" },
+  { name: "Folk", query: "folk music" },
+  { name: "Electronic", query: "electronic music" },
+  { name: "Hip Hop", query: "hip hop music" },
+  { name: "Country", query: "country music" },
+];
+
 export const Library = ({ onPlayTrack }: LibraryProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState<ArchiveTrack[]>([]);
+  const [featuredTracks, setFeaturedTracks] = useState<ArchiveTrack[]>([]);
   const [searching, setSearching] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
+  useEffect(() => {
+    // Load featured/popular tracks on mount
+    loadFeaturedTracks();
+  }, []);
+
+  const loadFeaturedTracks = async () => {
+    try {
+      const response = await fetch(
+        `https://archive.org/advancedsearch.php?q=mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=20&output=json`
+      );
+      const data = await response.json();
+      setFeaturedTracks(data.response.docs || []);
+    } catch (error) {
+      console.error('Failed to load featured tracks:', error);
+    }
+  };
+
+  const handleSearch = async (query?: string) => {
+    const searchTerm = query || searchQuery;
+    if (!searchTerm.trim()) {
       toast.error("Please enter a search term");
       return;
     }
 
     setSearching(true);
+    setSelectedGenre(null);
     try {
-      const query = encodeURIComponent(searchQuery);
+      const encodedQuery = encodeURIComponent(searchTerm);
       const response = await fetch(
-        `https://archive.org/advancedsearch.php?q=${query}%20AND%20mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=20&output=json`
+        `https://archive.org/advancedsearch.php?q=${encodedQuery}%20AND%20mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=30&output=json`
       );
       
       const data = await response.json();
@@ -45,6 +78,12 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     } finally {
       setSearching(false);
     }
+  };
+
+  const handleGenreClick = async (genre: { name: string; query: string }) => {
+    setSelectedGenre(genre.name);
+    setSearchQuery("");
+    handleSearch(genre.query);
   };
 
   const playTrack = async (track: ArchiveTrack) => {
@@ -86,28 +125,17 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex gap-2">
-        <Input
-          placeholder="Search for music..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={handleKeyPress}
-          className="flex-1"
-        />
-        <Button onClick={handleSearch} disabled={searching}>
-          <Search className="h-4 w-4 mr-2" />
-          {searching ? "Searching..." : "Search"}
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        {results.map((track) => (
-          <div
-            key={track.identifier}
-            className="p-4 rounded-lg bg-card hover:bg-accent transition-colors flex items-center justify-between"
-          >
+  const renderTracks = (tracks: ArchiveTrack[]) => (
+    <div className="space-y-2">
+      {tracks.map((track) => (
+        <div
+          key={track.identifier}
+          className="p-4 rounded-lg bg-card hover:bg-accent transition-colors flex items-center justify-between group"
+        >
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="w-12 h-12 bg-primary/10 rounded flex items-center justify-center flex-shrink-0">
+              <Music2 className="h-6 w-6 text-primary" />
+            </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{track.title}</p>
               <p className="text-sm text-muted-foreground truncate">
@@ -115,26 +143,75 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
               </p>
               {track.downloads && (
                 <p className="text-xs text-muted-foreground">
-                  {track.downloads.toLocaleString()} downloads
+                  {track.downloads.toLocaleString()} plays
                 </p>
               )}
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => playTrack(track)}
-            >
-              <Play className="h-4 w-4" />
-            </Button>
           </div>
-        ))}
-        
-        {results.length === 0 && !searching && (
-          <p className="text-center text-muted-foreground py-12">
-            Search for music from Internet Archive's free library
-          </p>
-        )}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => playTrack(track)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Play className="h-5 w-5" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Search songs, artists, albums..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyPress={handleKeyPress}
+          className="flex-1"
+        />
+        <Button onClick={() => handleSearch()} disabled={searching}>
+          <Search className="h-4 w-4 mr-2" />
+          {searching ? "Searching..." : "Search"}
+        </Button>
       </div>
+
+      <Tabs defaultValue="featured" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="featured">Featured</TabsTrigger>
+          <TabsTrigger value="genres">Genres</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="featured" className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-4">
+              {selectedGenre ? `${selectedGenre} Music` : results.length > 0 ? 'Search Results' : 'Popular Tracks'}
+            </h3>
+            {renderTracks(results.length > 0 ? results : featuredTracks)}
+            {results.length === 0 && featuredTracks.length === 0 && !searching && (
+              <p className="text-center text-muted-foreground py-12">
+                Loading featured music...
+              </p>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="genres" className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {GENRES.map((genre) => (
+              <button
+                key={genre.name}
+                onClick={() => handleGenreClick(genre)}
+                className="p-6 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 hover:from-primary/30 hover:to-primary/10 transition-all"
+              >
+                <Music2 className="h-8 w-8 mb-2 text-primary" />
+                <p className="font-semibold">{genre.name}</p>
+              </button>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

@@ -139,16 +139,34 @@ serve(async (req) => {
       try {
         console.log(`Searching for: ${track.artist} - ${track.title}`);
         
-        // Search Internet Archive
-        const searchQuery = encodeURIComponent(`${track.artist} ${track.title}`);
+        // Search Internet Archive with better matching
+        const artistQuery = encodeURIComponent(track.artist);
+        const titleQuery = encodeURIComponent(track.title);
         const archiveResponse = await fetch(
-          `https://archive.org/advancedsearch.php?q=${searchQuery}%20AND%20mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=1&output=json`
+          `https://archive.org/advancedsearch.php?q=creator:${artistQuery}%20AND%20title:${titleQuery}%20AND%20mediatype:audio&fl=identifier,title,creator,downloads&sort=downloads%20desc&rows=5&output=json`
         );
         
         const archiveData = await archiveResponse.json();
+        console.log(`Search results for "${track.artist} - ${track.title}":`, archiveData.response.docs.length);
         
         if (archiveData.response.docs.length > 0) {
-          const doc = archiveData.response.docs[0];
+          // Find best match by checking title similarity
+          let bestMatch = archiveData.response.docs[0];
+          const searchTitle = track.title.toLowerCase();
+          const searchArtist = track.artist.toLowerCase();
+          
+          for (const doc of archiveData.response.docs) {
+            const docTitle = (doc.title || '').toLowerCase();
+            const docCreator = (doc.creator || '').toLowerCase();
+            
+            if (docTitle.includes(searchTitle) && docCreator.includes(searchArtist)) {
+              bestMatch = doc;
+              break;
+            }
+          }
+          
+          const doc = bestMatch;
+          console.log(`Best match: ${doc.title} by ${doc.creator}`);
           
           // Get metadata for the item to find audio file
           const metadataResponse = await fetch(

@@ -52,7 +52,7 @@ export const ImportDialog = ({ onImportComplete }: { onImportComplete: () => voi
         <DialogHeader>
           <DialogTitle>Import from Spotify</DialogTitle>
           <DialogDescription>
-            Paste a Spotify playlist or track share link to import songs from Internet Archive's free music library.
+            Paste a Spotify playlist or track share link. We'll search Internet Archive's free music library for similar songs. <strong>Note:</strong> Internet Archive has public domain and free music - commercial tracks may not be available.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">

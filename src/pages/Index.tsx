@@ -4,6 +4,7 @@ import { Auth } from "@/components/Auth";
 import { ImportDialog } from "@/components/ImportDialog";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Library } from "@/pages/Library";
+import { PlaylistManager, DeletePlaylist } from "@/components/PlaylistManager";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Music, LogOut, Library as LibraryIcon, ListMusic } from "lucide-react";
@@ -162,25 +163,39 @@ const Index = () => {
           <TabsContent value="playlists">
             <div className="grid md:grid-cols-[300px,1fr] gap-6">
               <aside className="space-y-4">
-                <h2 className="text-lg font-semibold">Your Playlists</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Your Playlists</h2>
+                  <PlaylistManager onPlaylistsChange={fetchPlaylists} />
+                </div>
                 <div className="space-y-2">
                   {playlists.map((playlist) => (
-                    <button
-                      key={playlist.id}
-                      onClick={() => setSelectedPlaylist(playlist.id)}
-                      className={`w-full text-left p-3 rounded-lg transition-colors ${
-                        selectedPlaylist === playlist.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card hover:bg-accent'
-                      }`}
-                    >
-                      <p className="font-medium">{playlist.name}</p>
-                      <p className="text-sm opacity-75">{playlist.description}</p>
-                    </button>
+                    <div key={playlist.id} className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedPlaylist(playlist.id)}
+                        className={`flex-1 text-left p-3 rounded-lg transition-colors ${
+                          selectedPlaylist === playlist.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-card hover:bg-accent'
+                        }`}
+                      >
+                        <p className="font-medium">{playlist.name}</p>
+                        <p className="text-sm opacity-75">{playlist.description}</p>
+                      </button>
+                      <DeletePlaylist
+                        playlistId={playlist.id}
+                        playlistName={playlist.name}
+                        onDelete={() => {
+                          if (selectedPlaylist === playlist.id) {
+                            setSelectedPlaylist(null);
+                          }
+                          fetchPlaylists();
+                        }}
+                      />
+                    </div>
                   ))}
                   {playlists.length === 0 && (
                     <p className="text-muted-foreground text-sm">
-                      No playlists yet. Import one from Spotify!
+                      No playlists yet. Create one or import from Spotify!
                     </p>
                   )}
                 </div>
