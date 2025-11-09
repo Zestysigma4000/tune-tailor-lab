@@ -41,6 +41,11 @@ serve(async (req) => {
     const spotifyClientId = Deno.env.get('SPOTIFY_CLIENT_ID');
     const spotifyClientSecret = Deno.env.get('SPOTIFY_CLIENT_SECRET');
     
+    if (!spotifyClientId || !spotifyClientSecret) {
+      throw new Error('Spotify credentials not configured');
+    }
+
+    console.log('Getting Spotify access token...');
     const tokenResponse = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: {
@@ -50,36 +55,77 @@ serve(async (req) => {
       body: 'grant_type=client_credentials'
     });
 
-    const { access_token } = await tokenResponse.json();
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('Spotify token error:', errorText);
+      throw new Error('Failed to get Spotify access token');
+    }
+
+    const tokenData = await tokenResponse.json();
+    const access_token = tokenData.access_token;
+
+    if (!access_token) {
+      throw new Error('No access token received from Spotify');
+    }
 
     let tracks = [];
 
     if (playlistMatch) {
       // Fetch playlist tracks from Spotify
       const playlistId = playlistMatch[1];
+      console.log('Fetching playlist:', playlistId);
+      
       const playlistResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlistId}`,
         { headers: { 'Authorization': `Bearer ${access_token}` } }
       );
+
+      if (!playlistResponse.ok) {
+        const errorText = await playlistResponse.text();
+        console.error('Spotify playlist fetch error:', errorText);
+        throw new Error(`Failed to fetch playlist: ${playlistResponse.status}`);
+      }
+
       const playlistData = await playlistResponse.json();
+      console.log('Playlist data received:', JSON.stringify(playlistData).substring(0, 200));
       
-      tracks = playlistData.tracks.items.map((item: any) => ({
-        title: item.track.name,
-        artist: item.track.artists[0].name,
-        album: item.track.album?.name,
-      }));
+      if (!playlistData.tracks || !playlistData.tracks.items) {
+        console.error('Invalid playlist structure:', playlistData);
+        throw new Error('Invalid playlist data from Spotify');
+      }
+
+      tracks = playlistData.tracks.items
+        .filter((item: any) => item?.track)
+        .map((item: any) => ({
+          title: item.track.name,
+          artist: item.track.artists?.[0]?.name || 'Unknown Artist',
+          album: item.track.album?.name,
+        }));
     } else if (trackMatch) {
       // Fetch single track from Spotify
       const trackId = trackMatch[1];
+      console.log('Fetching track:', trackId);
+      
       const trackResponse = await fetch(
         `https://api.spotify.com/v1/tracks/${trackId}`,
         { headers: { 'Authorization': `Bearer ${access_token}` } }
       );
+
+      if (!trackResponse.ok) {
+        const errorText = await trackResponse.text();
+        console.error('Spotify track fetch error:', errorText);
+        throw new Error(`Failed to fetch track: ${trackResponse.status}`);
+      }
+
       const trackData = await trackResponse.json();
       
+      if (!trackData.name) {
+        throw new Error('Invalid track data from Spotify');
+      }
+
       tracks = [{
         title: trackData.name,
-        artist: trackData.artists[0].name,
+        artist: trackData.artists?.[0]?.name || 'Unknown Artist',
         album: trackData.album?.name,
       }];
     }

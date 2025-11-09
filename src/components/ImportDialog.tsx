@@ -51,6 +51,9 @@ export const ImportDialog = ({ onImportComplete }: { onImportComplete: () => voi
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Import from Spotify</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Paste a Spotify playlist or track share link to import songs from Internet Archive's free music library.
+          </p>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
