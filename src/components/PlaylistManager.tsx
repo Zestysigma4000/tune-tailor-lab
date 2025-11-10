@@ -11,10 +11,14 @@ import { toast } from "sonner";
 
 interface PlaylistManagerProps {
   onPlaylistsChange: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export const PlaylistManager = ({ onPlaylistsChange }: PlaylistManagerProps) => {
-  const [open, setOpen] = useState(false);
+export const PlaylistManager = ({ onPlaylistsChange, open: controlledOpen, onOpenChange }: PlaylistManagerProps) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = onOpenChange || setInternalOpen;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);

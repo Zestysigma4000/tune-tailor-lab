@@ -4,10 +4,11 @@ import { Auth } from "@/components/Auth";
 import { ImportDialog } from "@/components/ImportDialog";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Library } from "@/pages/Library";
-import { PlaylistManager, DeletePlaylist } from "@/components/PlaylistManager";
+import { PlaylistView } from "@/pages/PlaylistView";
+import { Sidebar } from "@/components/Sidebar";
+import { PlaylistManager } from "@/components/PlaylistManager";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Music, LogOut, Library as LibraryIcon, ListMusic } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 interface Playlist {
   id: string;
@@ -32,6 +33,8 @@ const Index = () => {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState("library");
+  const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -122,119 +125,73 @@ const Index = () => {
     return <Auth />;
   }
 
+  const selectedPlaylistData = playlists.find(p => p.id === selectedPlaylist);
+
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Music className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Music Library</h1>
+    <div className="flex h-screen bg-background overflow-hidden">
+      <Sidebar
+        playlists={playlists}
+        selectedPlaylist={selectedPlaylist}
+        onSelectPlaylist={setSelectedPlaylist}
+        onCreatePlaylist={() => setShowPlaylistDialog(true)}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+          <div className="px-8 py-4 flex items-center justify-between">
+            <div className="flex-1" />
+            <div className="flex items-center gap-4">
+              <ImportDialog onImportComplete={fetchPlaylists} />
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <ImportDialog onImportComplete={fetchPlaylists} />
-            <Button variant="ghost" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <Tabs defaultValue="library" className="space-y-6">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
-            <TabsTrigger value="library">
-              <LibraryIcon className="h-4 w-4 mr-2" />
-              Library
-            </TabsTrigger>
-            <TabsTrigger value="playlists">
-              <ListMusic className="h-4 w-4 mr-2" />
-              Your Playlists
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="library">
+        <main className="flex-1 overflow-y-auto px-8 py-6 pb-32">
+          {activeTab === "library" && (
             <Library onPlayTrack={(track) => {
               setCurrentTrack(track as any);
               setCurrentTrackIndex(0);
             }} />
-          </TabsContent>
+          )}
+          
+          {activeTab === "playlists" && (
+            <PlaylistView
+              playlist={selectedPlaylistData || null}
+              tracks={tracks}
+              currentTrack={currentTrack}
+              onPlayTrack={playTrack}
+              onDeletePlaylist={() => {
+                setSelectedPlaylist(null);
+                fetchPlaylists();
+              }}
+            />
+          )}
+          
+          {activeTab === "search" && (
+            <Library onPlayTrack={(track) => {
+              setCurrentTrack(track as any);
+              setCurrentTrackIndex(0);
+            }} />
+          )}
+        </main>
 
-          <TabsContent value="playlists">
-            <div className="grid md:grid-cols-[300px,1fr] gap-6">
-              <aside className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Your Playlists</h2>
-                  <PlaylistManager onPlaylistsChange={fetchPlaylists} />
-                </div>
-                <div className="space-y-2">
-                  {playlists.map((playlist) => (
-                    <div key={playlist.id} className="flex items-center gap-2">
-                      <button
-                        onClick={() => setSelectedPlaylist(playlist.id)}
-                        className={`flex-1 text-left p-3 rounded-lg transition-colors ${
-                          selectedPlaylist === playlist.id
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-card hover:bg-accent'
-                        }`}
-                      >
-                        <p className="font-medium">{playlist.name}</p>
-                        <p className="text-sm opacity-75">{playlist.description}</p>
-                      </button>
-                      <DeletePlaylist
-                        playlistId={playlist.id}
-                        playlistName={playlist.name}
-                        onDelete={() => {
-                          if (selectedPlaylist === playlist.id) {
-                            setSelectedPlaylist(null);
-                          }
-                          fetchPlaylists();
-                        }}
-                      />
-                    </div>
-                  ))}
-                  {playlists.length === 0 && (
-                    <p className="text-muted-foreground text-sm">
-                      No playlists yet. Create one or import from Spotify!
-                    </p>
-                  )}
-                </div>
-              </aside>
+        <PlayerBar
+          currentTrack={currentTrack}
+          onNext={handleNext}
+          onPrevious={handlePrevious}
+        />
+      </div>
 
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold">
-                  {selectedPlaylist ? 'Tracks' : 'Select a playlist'}
-                </h2>
-                <div className="space-y-2">
-                  {tracks.map((track, index) => (
-                    <button
-                      key={track.id}
-                      onClick={() => playTrack(track, index)}
-                      className={`w-full text-left p-4 rounded-lg transition-colors ${
-                        currentTrack?.id === track.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card hover:bg-accent'
-                      }`}
-                    >
-                      <p className="font-medium">{track.title}</p>
-                      <p className="text-sm opacity-75">{track.artist}</p>
-                      {track.album && <p className="text-xs opacity-60">{track.album}</p>}
-                    </button>
-                  ))}
-                  {tracks.length === 0 && selectedPlaylist && (
-                    <p className="text-muted-foreground text-sm">No tracks in this playlist</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
-
-      <PlayerBar
-        currentTrack={currentTrack}
-        onNext={handleNext}
-        onPrevious={handlePrevious}
+      <PlaylistManager 
+        onPlaylistsChange={fetchPlaylists} 
+        open={showPlaylistDialog}
+        onOpenChange={setShowPlaylistDialog}
       />
     </div>
   );

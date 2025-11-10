@@ -72,14 +72,14 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
   const loadFeaturedTracks = async () => {
     try {
       const response = await fetch(
-        'https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30',
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-music-search`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20231122.01.00' } },
-            query: 'top hits 2024'
-          })
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+          },
+          body: JSON.stringify({ query: 'top hits 2024' })
         }
       );
       const data = await response.json();
@@ -100,14 +100,14 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
     setSelectedGenre(null);
     try {
       const response = await fetch(
-        'https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30',
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-music-search`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20231122.01.00' } },
-            query: searchTerm
-          })
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+          },
+          body: JSON.stringify({ query: searchTerm })
         }
       );
       
