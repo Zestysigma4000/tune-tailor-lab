@@ -139,7 +139,6 @@ export const Library = ({ onPlayTrack }: LibraryProps) => {
       artist: track.artist,
       stream_url: `https://www.youtube.com/watch?v=${track.videoId}`,
     });
-    toast.success(`Playing: ${track.title}`);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
